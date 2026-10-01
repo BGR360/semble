@@ -28,9 +28,20 @@ def _load_cached(model_path: str) -> StaticModel:
     disable_progress_bars()
     logging.getLogger("huggingface_hub.utils._http").addFilter(_drop_unauthenticated_warning)
     try:
-        return StaticModel.from_pretrained(model_path, force_download=False)
+        model = StaticModel.from_pretrained(model_path, force_download=False)
     except ValueError:
-        return StaticModel.from_pretrained(model_path, force_download=True)
+        model = StaticModel.from_pretrained(model_path, force_download=True)
+
+    # Models can store token vectors as float16, which is bad for a few reasons:
+    # 1. Most CPUs don't have float16 arithmetic instructions, so averaging vectors is slow.
+    # 2. vicinity 0.4.4 uses a fixed epsilon of 0.00001 to check whether vectors are already normalized.
+    #    - After model2vec embeds a chunk of vectors at float16 precision, they are typically only
+    #      within +/-0.001 of 1.0, so vicinity will waste time copying and normalizing them.
+    #
+    # Make the model work with float32 to avoid both issues.
+    # Plus, the rest of semble uses float32, so this keeps everything consistent.
+    model.embedding = model.embedding.astype(np.float32)
+    return model
 
 
 def load_model(model_path: str | None = None) -> tuple[StaticModel, str]:

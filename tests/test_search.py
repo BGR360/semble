@@ -148,6 +148,7 @@ def test_sort_top_k() -> None:
 def test_load_model(model_path: str | None, expected_call_arg: str, incomplete_cache: bool) -> None:
     """load_model calls from_pretrained with default or custom model path."""
     fake_model = MagicMock(spec=StaticModel)
+    fake_model.embedding = np.zeros((4, 8), dtype=np.float16)
     side_effect = [ValueError("Could not find expected model files"), fake_model] if incomplete_cache else None
     with patch(
         "semble.index.dense.StaticModel.from_pretrained", return_value=fake_model, side_effect=side_effect
@@ -158,6 +159,8 @@ def test_load_model(model_path: str | None, expected_call_arg: str, incomplete_c
     if incomplete_cache:
         expected_calls.append(call(expected_call_arg, force_download=True))
     assert mock_fp.call_args_list == expected_calls
+    # Model embedding should be converted to float32
+    assert result.embedding.dtype == np.float32
 
 
 @pytest.mark.parametrize(
